@@ -32,18 +32,16 @@ const int kVersionMajor = 1;
 const int kVersionMinor = 2;
 // The micro version is for other things like a release of bugfixes.
 const int kVersionMicro = 0;
-
 const int kNumFeatures = 64;
 const int kNumMelBins = 160;
-const int kNumChannels = 1;
+const int kNumChannels = 2;
 const int kFrameRate = 50;
 const int kOverlapFactor = 2;
-
 // LINT.IfChange
 const int kNumHeaderBits = 0;
 const std::vector<int>& GetSupportedQuantizedBits() {
   static const std::vector<int>* const supported_quantization_bits =
-      new std::vector<int>{64, 120, 184};
+      new std::vector<int>{64, 120, 184, 240, 304, 360, 424, 480};
   return *supported_quantization_bits;
 }
 // LINT.ThenChange(

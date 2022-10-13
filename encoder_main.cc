@@ -31,8 +31,9 @@ ABSL_FLAG(std::string, output_dir, "",
           "creates dir if it does not exist. Output files use the same "
           "name as the wav file they come from with a '.lyra' postfix. Will "
           "overwrite existing files.");
-ABSL_FLAG(int, bitrate, 3200,
-          "The bitrate in bps with which to quantize the file.");
+ABSL_FLAG(int, quality_preset, 1,
+          "The quality preset of the encoder (max 8). 1-3 are the officially "
+          "supported ones in lyra v2. Higher = better quality");
 ABSL_FLAG(bool, enable_preprocessing, false,
           "If enabled runs the input signal through the preprocessing "
           "module before encoding.");
@@ -53,7 +54,7 @@ int main(int argc, char** argv) {
   const ghc::filesystem::path model_path =
       chromemedia::codec::GetCompleteArchitecturePath(
           absl::GetFlag(FLAGS_model_path));
-  const int bitrate = absl::GetFlag(FLAGS_bitrate);
+  const int quality_preset = absl::GetFlag(FLAGS_quality_preset);
   const bool enable_preprocessing = absl::GetFlag(FLAGS_enable_preprocessing);
   const bool enable_dtx = absl::GetFlag(FLAGS_enable_dtx);
 
@@ -78,7 +79,7 @@ int main(int argc, char** argv) {
   const auto output_path =
       ghc::filesystem::path(output_dir) / input_path.stem().concat(".lyra");
 
-  if (!chromemedia::codec::EncodeFile(input_path, output_path, bitrate,
+  if (!chromemedia::codec::EncodeFile(input_path, output_path, quality_preset,
                                       enable_preprocessing, enable_dtx,
                                       model_path)) {
     LOG(ERROR) << "Failed to encode " << input_path;

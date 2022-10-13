@@ -49,34 +49,42 @@ std::unique_ptr<LyraEncoder> LyraEncoder::Create(
     LOG(ERROR) << are_params_supported;
     return nullptr;
   }
-  const int num_quantized_bits = BitrateToNumQuantizedBits(bitrate);
+  const int num_quantized_bits = BitrateToNumQuantizedBits(bitrate, (sample_rate_hz/320));
   if (num_quantized_bits < 0) {
     LOG(ERROR) << "Bitrate " << bitrate << " bps is not supported by codec.";
     return nullptr;
   }
 
   std::unique_ptr<Resampler> resampler = nullptr;
-  if (kInternalSampleRateHz != sample_rate_hz) {
-    resampler = Resampler::Create(sample_rate_hz, kInternalSampleRateHz);
-    if (resampler == nullptr) {
-      LOG(ERROR) << "Could not create Resampler.";
-      return nullptr;
-    }
+  int numFeatures = 64;
+  if (sample_rate_hz == 8000) {
+    numFeatures = 128;
+  } else if (sample_rate_hz == 16000) {
+    numFeatures = 64;
+  } else if (sample_rate_hz == 24000) {
+    numFeatures = 48; 
+  } else if (sample_rate_hz == 32000) {
+    numFeatures = 32; 
+  } else if (sample_rate_hz == 48000) {
+    numFeatures = 16; 
+  } else {
+    LOG(ERROR) << "Unsupported sampling rate: " << sample_rate_hz;
   }
+  const int numMelBins = numFeatures * 2.5;
 
   const int internal_samples_per_hop =
-      GetNumSamplesPerHop(kInternalSampleRateHz);
+      GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320));
   const int internal_samples_per_window =
-      GetNumSamplesPerWindow(kInternalSampleRateHz);
+      GetNumSamplesPerWindow(sample_rate_hz, (sample_rate_hz/320));
   auto feature_extractor = CreateFeatureExtractor(
-      kInternalSampleRateHz, kNumFeatures, internal_samples_per_hop,
+      sample_rate_hz, numFeatures, internal_samples_per_hop,
       internal_samples_per_window, model_path);
   if (feature_extractor == nullptr) {
     LOG(ERROR) << "Could not create Features Extractor.";
     return nullptr;
   }
 
-  auto vector_quantizer = CreateQuantizer(kNumFeatures, model_path);
+  auto vector_quantizer = CreateQuantizer(numFeatures, model_path);
   if (vector_quantizer == nullptr) {
     LOG(ERROR) << "Could not create Vector Quantizer.";
     return nullptr;
@@ -86,7 +94,7 @@ std::unique_ptr<LyraEncoder> LyraEncoder::Create(
   if (enable_dtx) {
     noise_estimator =
         NoiseEstimator::Create(sample_rate_hz, internal_samples_per_hop,
-                               internal_samples_per_window, kNumMelBins);
+                               internal_samples_per_window, numMelBins);
     if (noise_estimator == nullptr) {
       LOG(ERROR) << "Could not create Noise Estimator.";
       return nullptr;
@@ -121,17 +129,12 @@ std::optional<std::vector<uint8_t>> LyraEncoder::Encode(
   absl::Span<const int16_t> audio_for_encoding = audio;
 
   // Space to store resampled and/or filtered samples.
-  std::vector<int16_t> processed;
-  if (kInternalSampleRateHz != sample_rate_hz_) {
-    processed = resampler_->Resample(audio);
-    audio_for_encoding = absl::MakeConstSpan(processed);
-  }
 
   const int internal_samples_per_hop =
-      GetNumSamplesPerHop(kInternalSampleRateHz);
+      GetNumSamplesPerHop(sample_rate_hz_, (sample_rate_hz_/320));
   if (audio_for_encoding.size() != internal_samples_per_hop) {
     LOG(ERROR) << "The number of audio samples has to be exactly "
-               << GetNumSamplesPerHop(sample_rate_hz_) << ", but is "
+               << GetNumSamplesPerHop(sample_rate_hz_, (sample_rate_hz_/320)) << ", but is "
                << audio.size() << ".";
     return std::nullopt;
   }
@@ -164,7 +167,7 @@ std::optional<std::vector<uint8_t>> LyraEncoder::Encode(
 }
 
 bool LyraEncoder::set_bitrate(int bitrate) {
-  const int num_quantized_bits = BitrateToNumQuantizedBits(bitrate);
+  const int num_quantized_bits = BitrateToNumQuantizedBits(bitrate, (sample_rate_hz_/320));
   if (num_quantized_bits < 0) {
     LOG(ERROR) << "Bitrate " << bitrate << " bps is not supported by codec.";
     return false;
@@ -177,7 +180,7 @@ int LyraEncoder::sample_rate_hz() const { return sample_rate_hz_; }
 
 int LyraEncoder::num_channels() const { return num_channels_; }
 
-int LyraEncoder::bitrate() const { return GetBitrate(num_quantized_bits_); }
+int LyraEncoder::bitrate() const { return GetBitrate(num_quantized_bits_, (sample_rate_hz_/320)); }
 
 int LyraEncoder::frame_rate() const { return kFrameRate; }
 }  // namespace codec

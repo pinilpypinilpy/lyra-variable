@@ -47,7 +47,7 @@ class ResidualVectorQuantizer : public VectorQuantizerInterface {
 
  private:
   // LINT.IfChange
-  static constexpr int kMaxNumQuantizedBits = 184;
+  static constexpr int kMaxNumQuantizedBits = 480;
   // LINT.ThenChange(
   // lyra_components.cc,
   // lyra_config.cc,

@@ -87,9 +87,10 @@ bool DecodeFeatures(const std::vector<uint8_t>& packet_stream, int packet_size,
                     bool randomize_num_samples_requested, absl::BitGenRef gen,
                     LyraDecoder* decoder,
                     PacketLossModelInterface* packet_loss_model,
-                    std::vector<int16_t>* decoded_audio) {
+                    std::vector<int16_t>* decoded_audio,
+                    int sample_rate_hz) {
   const int num_samples_per_packet =
-      GetNumSamplesPerHop(decoder->sample_rate_hz());
+      GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320));
 
   const auto benchmark_start = absl::Now();
   for (int encoded_index = 0; encoded_index < packet_stream.size();
@@ -99,7 +100,7 @@ bool DecodeFeatures(const std::vector<uint8_t>& packet_stream, int packet_size,
 
     const int frame_index = encoded_index / packet_size;
     const float packet_start_seconds =
-        static_cast<float>(frame_index) / decoder->frame_rate();
+        static_cast<float>(frame_index) / (sample_rate_hz/320);
     std::optional<std::vector<int16_t>> decoded;
     if (packet_loss_model == nullptr || packet_loss_model->IsPacketReceived()) {
       if (!decoder->SetEncodedPacket(encoded_packet)) {
@@ -143,11 +144,11 @@ bool DecodeFeatures(const std::vector<uint8_t>& packet_stream, int packet_size,
 
 bool DecodeFile(const ghc::filesystem::path& encoded_path,
                 const ghc::filesystem::path& output_path, int sample_rate_hz,
-                int bitrate, bool randomize_num_samples_requested,
+                int quality_preset, bool randomize_num_samples_requested,
                 float packet_loss_rate, float average_burst_length,
                 const PacketLossPattern& fixed_packet_loss_pattern,
-                const ghc::filesystem::path& model_path) {
-  auto decoder = LyraDecoder::Create(sample_rate_hz, kNumChannels, model_path);
+                const ghc::filesystem::path& model_path, int num_channels) {
+  auto decoder = LyraDecoder::Create(sample_rate_hz, num_channels, model_path);
   if (decoder == nullptr) {
     LOG(ERROR) << "Could not create lyra decoder.";
     return false;
@@ -159,7 +160,7 @@ bool DecodeFile(const ghc::filesystem::path& encoded_path,
 
   } else {
     packet_loss_model = std::make_unique<FixedPacketLossModel>(
-        sample_rate_hz, GetNumSamplesPerHop(sample_rate_hz),
+        sample_rate_hz, GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320)),
         fixed_packet_loss_pattern.starts_,
         fixed_packet_loss_pattern.durations_);
   }
@@ -177,7 +178,30 @@ bool DecodeFile(const ghc::filesystem::path& encoded_path,
       std::istreambuf_iterator<char>(encoded_stream),
       std::istreambuf_iterator<char>()};
 
-  const int packet_size = BitrateToPacketSize(bitrate);
+  int bitrate = 0;
+  int multiple = sample_rate_hz/8000;
+  if (quality_preset == 1) {
+    bitrate = 1600*multiple;
+    
+  } else if (quality_preset == 2) {
+    bitrate = (1400*multiple) + (1600*multiple);
+
+  } else if (quality_preset == 3) {
+    bitrate = (1400*multiple) + (1600*multiple)*2;
+  } else if (quality_preset == 4) {
+    bitrate = (1400*multiple)*2 + (1600*multiple)*2;
+  } else if (quality_preset == 5) {
+    bitrate = (1400*multiple)*2 + (1600*multiple)*3;
+  } else if (quality_preset == 6) {
+    bitrate = (1400*multiple)*3 + (1600*multiple)*3;
+  } else if (quality_preset == 7) {
+    bitrate = (1400*multiple)*3 + (1600*multiple)*4;
+  } else if (quality_preset == 8) {
+    bitrate = (1400*multiple)*4 + (1600*multiple)*4;
+  } else {
+    LOG(ERROR) << "Unsupported quality preset: " << quality_preset;
+  }
+  const int packet_size = BitrateToPacketSize(bitrate, (sample_rate_hz/320));
   const int stream_size_remainder = packet_stream_string.size() % packet_size;
   if (stream_size_remainder != 0) {
     LOG(WARNING)
@@ -203,14 +227,14 @@ bool DecodeFile(const ghc::filesystem::path& encoded_path,
   absl::BitGen gen;
   if (!DecodeFeatures(packet_stream, packet_size,
                       randomize_num_samples_requested, gen, decoder.get(),
-                      packet_loss_model.get(), &decoded_audio)) {
+                      packet_loss_model.get(), &decoded_audio, sample_rate_hz)) {
     LOG(ERROR) << "Unable to decode features for file " << encoded_path;
     return false;
   }
 
   absl::Status write_status =
-      Write16BitWavFileFromVector(output_path.string(), decoder->num_channels(),
-                                  decoder->sample_rate_hz(), decoded_audio);
+      Write16BitWavFileFromVector(output_path.string(), num_channels,
+                                  sample_rate_hz, decoded_audio);
   if (!write_status.ok()) {
     LOG(ERROR) << write_status;
     return false;

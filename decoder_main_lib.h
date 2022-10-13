@@ -66,7 +66,8 @@ bool DecodeFile(const ghc::filesystem::path& encoded_path,
                 int bitrate, bool randomize_num_samples_requested,
                 float packet_loss_rate, float average_burst_length,
                 const PacketLossPattern& fixed_packet_loss_pattern,
-                const ghc::filesystem::path& model_path);
+                const ghc::filesystem::path& model_path,
+                int num_channels);
 
 }  // namespace codec
 }  // namespace chromemedia

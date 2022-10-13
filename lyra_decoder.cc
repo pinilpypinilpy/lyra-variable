@@ -39,23 +39,40 @@ namespace codec {
 namespace {
 
 // Duration of pure packet loss concealment.
-inline int GetConcealmentDurationSamples() {
-  static constexpr float kConcealmentDurationSeconds = 0.08;
-  static constexpr int kConcealmentDurationSamples =
-      kConcealmentDurationSeconds * kInternalSampleRateHz;
+inline int GetConcealmentDurationSamples(int sample_rate_hz) {
+  static const float kConcealmentDurationSeconds = 0.08;
+  static const int kConcealmentDurationSamples =
+      kConcealmentDurationSeconds * sample_rate_hz;
   CHECK_EQ(
-      kConcealmentDurationSamples % GetNumSamplesPerHop(kInternalSampleRateHz),
+      kConcealmentDurationSamples % GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320)),
       0);
   return kConcealmentDurationSamples;
 }
 
+inline int GetNumFeatures(int sample_rate_hz) {
+  int numFeatures = 64;
+  if (sample_rate_hz == 8000) {
+    numFeatures = 96;
+  } else if (sample_rate_hz == 16000) {
+    numFeatures = 64; //make sure these values don't give decoder warnings
+  } else if (sample_rate_hz == 24000) {
+    numFeatures = 48; 
+  } else if (sample_rate_hz == 32000) {
+    numFeatures = 32; 
+  } else if (sample_rate_hz == 48000) {
+    numFeatures = 16; 
+  } else {
+    LOG(ERROR) << "Unsupported sampling rate: " << sample_rate_hz;
+  }
+  return numFeatures;
+}
 // Duration it takes to fade from concealment to comfort noise, and from
 // comfort noise to received packets.
-inline int GetFadeDurationSamples() {
-  static constexpr float kFadeDurationSeconds = 0.04;
-  static constexpr int kFadeDurationSamples =
-      kFadeDurationSeconds * kInternalSampleRateHz;
-  CHECK_EQ(kFadeDurationSamples % GetNumSamplesPerHop(kInternalSampleRateHz),
+inline int GetFadeDurationSamples(int sample_rate_hz) {
+  static const float kFadeDurationSeconds = 0.04;
+  static const int kFadeDurationSamples =
+      kFadeDurationSeconds * sample_rate_hz;
+  CHECK_EQ(kFadeDurationSamples % GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320)),
            0);
   return kFadeDurationSamples;
 }
@@ -66,23 +83,24 @@ int GetNumSamplesToGenerate(int num_samples_requested,
                             int samples_generated_so_far,
                             int concealment_progress,
                             int model_samples_available,
-                            int cng_samples_available) {
+                            int cng_samples_available,
+                            int sample_rate_hz) {
   int samples_remaining_packet;
   if (concealment_progress < 0) {
     // Finish playing out the remainder of the last fake packet.
     samples_remaining_packet = std::abs(concealment_progress);
-  } else if (concealment_progress < GetConcealmentDurationSamples()) {
+  } else if (concealment_progress < GetConcealmentDurationSamples(sample_rate_hz)) {
     // If we have not yet maxed out concealment progress, the
     // |generative_model_| will be used.
     samples_remaining_packet =
-        model_samples_available % GetNumSamplesPerHop(kInternalSampleRateHz);
+        model_samples_available % GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320));
   } else {
     // Otherwise the  |comfort_noise_generator_| is guaranteed to be used.
     samples_remaining_packet = cng_samples_available;
   }
   // If we are out of samples, assume we can always add estimated features.
   if (samples_remaining_packet == 0) {
-    samples_remaining_packet = GetNumSamplesPerHop(kInternalSampleRateHz);
+    samples_remaining_packet = GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320));
   }
   // Take the min between the next packet boundary and the remaining number of
   // samples requested.
@@ -101,45 +119,45 @@ std::unique_ptr<LyraDecoder> LyraDecoder::Create(
     LOG(ERROR) << are_params_supported;
     return nullptr;
   }
-  const int kNumSamplesPerHop = GetNumSamplesPerHop(kInternalSampleRateHz);
+  const int kNumSamplesPerHop = GetNumSamplesPerHop(sample_rate_hz, (sample_rate_hz/320));
   const int kNumSamplesPerWindow =
-      GetNumSamplesPerWindow(kInternalSampleRateHz);
+      GetNumSamplesPerWindow(sample_rate_hz, (sample_rate_hz/320));
 
-  // The resampler always resamples from |kInternalSampleRateHz| to the
+  // The resampler always resamples from |external_sample_rate_hz_| to the
   // requested |sample_rate_hz|.
   auto resampler =
-      BufferedResampler::Create(kInternalSampleRateHz, sample_rate_hz);
+      BufferedResampler::Create(sample_rate_hz, sample_rate_hz);
   if (resampler == nullptr) {
     LOG(ERROR) << "Could not create Buffered Resampler.";
     return nullptr;
   }
-  // All internal components operate at |kInternalSampleRateHz|.
+  // All internal components operate at |external_sample_rate_hz_|.
   auto model =
-      CreateGenerativeModel(kNumSamplesPerHop, kNumFeatures, model_path);
+      CreateGenerativeModel(kNumSamplesPerHop, GetNumFeatures(sample_rate_hz), model_path);
   if (model == nullptr) {
     LOG(ERROR) << "New model could not be instantiated.";
     return nullptr;
   }
   auto comfort_noise_generator =
-      ComfortNoiseGenerator::Create(kInternalSampleRateHz, kNumSamplesPerHop,
-                                    kNumSamplesPerWindow, kNumMelBins);
+      ComfortNoiseGenerator::Create(sample_rate_hz, kNumSamplesPerHop,
+                                    kNumSamplesPerWindow, (GetNumFeatures(sample_rate_hz)*2.5));
   if (comfort_noise_generator == nullptr) {
     LOG(ERROR) << "Could not create Comfort Noise Generator.";
     return nullptr;
   }
   auto noise_estimator =
-      NoiseEstimator::Create(kInternalSampleRateHz, kNumSamplesPerHop,
-                             kNumSamplesPerWindow, kNumMelBins);
+      NoiseEstimator::Create(sample_rate_hz, kNumSamplesPerHop,
+                             kNumSamplesPerWindow, (GetNumFeatures(sample_rate_hz)*2.5));
   if (noise_estimator == nullptr) {
     LOG(ERROR) << "Could not create Noise Estimator.";
     return nullptr;
   }
-  auto vector_quantizer = CreateQuantizer(kNumFeatures, model_path);
+  auto vector_quantizer = CreateQuantizer(GetNumFeatures(sample_rate_hz), model_path);
   if (vector_quantizer == nullptr) {
     LOG(ERROR) << "Could not create Vector Quantizer.";
     return nullptr;
   }
-  auto feature_estimator = CreateFeatureEstimator(kNumFeatures);
+  auto feature_estimator = CreateFeatureEstimator(GetNumFeatures(sample_rate_hz));
 
   // WrapUnique is used because of private c'tor.
   return absl::WrapUnique(
@@ -186,7 +204,7 @@ bool LyraDecoder::SetEncodedPacket(absl::Span<const uint8_t> encoded) {
 
   // Finish playing out any concealment or comfort noise packets before
   // moving on to the packet we are receiving.
-  if (concealment_progress_ == GetConcealmentDurationSamples()) {
+  if (concealment_progress_ == GetConcealmentDurationSamples(external_sample_rate_hz_)) {
     concealment_progress_ = -comfort_noise_generator_->num_samples_available();
   } else if (concealment_progress_ > 0) {
     concealment_progress_ = -generative_model_->num_samples_available();
@@ -244,7 +262,8 @@ std::optional<std::vector<int16_t>> LyraDecoder::DecodeSamplesInternal(
         /*model_samples_available=*/
         generative_model_->num_samples_available(),
         /*cng_samples_available=*/
-        comfort_noise_generator_->num_samples_available());
+        comfort_noise_generator_->num_samples_available(),
+        external_sample_rate_hz_);
 
     // Check if we are decoding from a received packet;
     const bool is_packet_received =
@@ -255,7 +274,7 @@ std::optional<std::vector<int16_t>> LyraDecoder::DecodeSamplesInternal(
       // Decoding from a received packet triggers comfort noise, if there is
       // any, to fade out.
       fade_direction_ = kFadeFromCNG;
-    } else if (concealment_progress_ == GetConcealmentDurationSamples()) {
+    } else if (concealment_progress_ == GetConcealmentDurationSamples(external_sample_rate_hz_)) {
       // Comfort noise begins fading in again once we have lost
       // |GetConcealmentDurationSamples()| samples in a row.
       fade_direction_ = kFadeToCNG;
@@ -270,10 +289,10 @@ std::optional<std::vector<int16_t>> LyraDecoder::DecodeSamplesInternal(
     int next_fade_progress =
         fade_progress_ + fade_direction_ * num_samples_to_generate;
     if (fade_direction_ == kFadeToCNG &&
-        fade_progress_ == GetFadeDurationSamples()) {
+        fade_progress_ == GetFadeDurationSamples(external_sample_rate_hz_)) {
       // |fade_progress_| maxes out at |GetFadeDurationSamples()|. Once here
       // we only generate comfort noise until |fade_direction_| is reversed.
-      next_fade_progress = GetFadeDurationSamples();
+      next_fade_progress = GetFadeDurationSamples(external_sample_rate_hz_);
       generative_samples_to_generate = 0;
     } else if (fade_direction_ == kFadeFromCNG && fade_progress_ == 0) {
       // |fade_progress_| has a minimum at 0. Once here we only produce
@@ -365,7 +384,7 @@ bool LyraDecoder::MaybeOverlapAndInsert(
 
   for (int i = 0; i < generative_model_hop.size(); ++i) {
     const float overlap_weight =
-        (1.f + std::cos(fade_progress * M_PI / GetFadeDurationSamples())) / 2.f;
+        (1.f + std::cos(fade_progress * M_PI / GetFadeDurationSamples(external_sample_rate_hz_))) / 2.f;
     result.push_back(generative_model_hop.at(i) * overlap_weight +
                      comfort_noise_hop.at(i) * (1.f - overlap_weight));
     fade_progress += fade_direction;
@@ -380,7 +399,7 @@ int LyraDecoder::num_channels() const { return num_channels_; }
 int LyraDecoder::frame_rate() const { return kFrameRate; }
 
 bool LyraDecoder::is_comfort_noise() const {
-  return fade_progress_ == GetFadeDurationSamples();
+  return fade_progress_ == GetFadeDurationSamples(external_sample_rate_hz_);
 }
 
 }  // namespace codec

@@ -33,9 +33,10 @@ ABSL_FLAG(std::string, output_dir, "",
           "overwrite existing files.");
 ABSL_FLAG(std::string, output_suffix, "_decoded",
           "A prefix for each of the output .wav files.");
-ABSL_FLAG(int, sample_rate_hz, 16000, "Desired output sample rate in Hertz.");
-ABSL_FLAG(int, bitrate, 3200,
-          "The bitrate in bps at which the file has been quantized.");
+ABSL_FLAG(int, sample_rate, 8000, "The sample rate of the original file");
+ABSL_FLAG(int, num_channels, 1, "The number of channels in the original file");
+ABSL_FLAG(int, quality_preset, 1,
+          "The quality preset (1-8) at which the file has been quantized.");
 ABSL_FLAG(bool, randomize_num_samples_requested, false,
           "If true, requests a random number of samples for decoding within "
           "each hop. If false, requests only one whole hop at a time.");
@@ -62,8 +63,9 @@ int main(int argc, char** argv) {
   const ghc::filesystem::path encoded_path(absl::GetFlag(FLAGS_encoded_path));
   const ghc::filesystem::path output_dir(absl::GetFlag(FLAGS_output_dir));
   const std::string output_suffix = absl::GetFlag(FLAGS_output_suffix);
-  const int sample_rate_hz = absl::GetFlag(FLAGS_sample_rate_hz);
-  const int bitrate = absl::GetFlag(FLAGS_bitrate);
+  const int sample_rate_hz = absl::GetFlag(FLAGS_sample_rate);
+  const int quality_preset = absl::GetFlag(FLAGS_quality_preset);
+  const int num_channels = absl::GetFlag(FLAGS_num_channels);
   const bool randomize_num_samples_requested =
       absl::GetFlag(FLAGS_randomize_num_samples_requested);
   const float packet_loss_rate = absl::GetFlag(FLAGS_packet_loss_rate);
@@ -99,9 +101,9 @@ int main(int argc, char** argv) {
                            encoded_path.stem().concat(output_suffix + ".wav");
 
   if (!chromemedia::codec::DecodeFile(encoded_path, output_path, sample_rate_hz,
-                                      bitrate, randomize_num_samples_requested,
+                                      quality_preset, randomize_num_samples_requested,
                                       packet_loss_rate, average_burst_length,
-                                      fixed_packet_loss_pattern, model_path)) {
+                                      fixed_packet_loss_pattern, model_path, num_channels)) {
     LOG(ERROR) << "Could not decode " << encoded_path;
     return -1;
   }

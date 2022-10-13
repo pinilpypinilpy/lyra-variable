@@ -48,11 +48,12 @@ class GenerativeModel : public GenerativeModelInterface {
 
   // Adds received features to the model.
   bool AddFeatures(const std::vector<float>& features) override final {
-    if (features.size() != num_features_) {
-      LOG(ERROR) << "Expecting features to be of shape " << num_features_
-                 << " but were of shape " << features.size() << ".";
-      return false;
-    }
+    //if (features.size() == num_features_) {
+    //  LOG(ERROR) << "Expecting features to be of shape "
+    //< num_features_
+    //             << " but were of shape " << features.size() << ".";
+    //  return false;
+    //}
     features_queue_.push(features);
     return true;
   }

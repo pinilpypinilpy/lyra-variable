@@ -46,15 +46,16 @@ namespace codec {
 ABSL_CONST_INIT extern const int kVersionMajor;
 ABSL_CONST_INIT extern const int kVersionMinor;
 ABSL_CONST_INIT extern const int kVersionMicro;
-ABSL_CONST_INIT extern const int kNumFeatures;
+ABSL_CONST_INIT extern const int kNumFeatures; 
 ABSL_CONST_INIT extern const int kNumMelBins;
 ABSL_CONST_INIT extern const int kNumChannels;
-ABSL_CONST_INIT extern const int kFrameRate;  // Frames/packets sent per second.
+ABSL_CONST_INIT extern const int kFrameRate; 
 ABSL_CONST_INIT extern const int kOverlapFactor;
 ABSL_CONST_INIT extern const int kNumHeaderBits;
 
-inline constexpr int kSupportedSampleRates[] = {8000, 16000, 32000, 48000};
+inline constexpr int kSupportedSampleRates[] = {8000, 16000, 24000, 32000, 48000};
 inline constexpr int kInternalSampleRateHz = 16000;
+
 
 const std::vector<int>& GetSupportedQuantizedBits();
 
@@ -67,13 +68,13 @@ inline const std::string& GetVersionString() {
 }
 
 // Functions to get values depending on sample rate.
-inline int GetNumSamplesPerHop(int sample_rate_hz) {
-  CHECK_EQ(sample_rate_hz % kFrameRate, 0);
-  return sample_rate_hz / kFrameRate;
+inline int GetNumSamplesPerHop(int sample_rate_hz, int frame_rate) {
+  CHECK_EQ(sample_rate_hz % frame_rate, 0);
+  return sample_rate_hz / frame_rate;
 }
 
-inline int GetNumSamplesPerWindow(int sample_rate_hz) {
-  return kOverlapFactor * GetNumSamplesPerHop(sample_rate_hz);
+inline int GetNumSamplesPerWindow(int sample_rate_hz, int frame_rate) {
+  return kOverlapFactor * GetNumSamplesPerHop(sample_rate_hz, frame_rate);
 }
 
 inline int GetPacketSize(int num_quantized_bits) {
@@ -81,13 +82,13 @@ inline int GetPacketSize(int num_quantized_bits) {
       static_cast<float>(num_quantized_bits + kNumHeaderBits) / CHAR_BIT));
 }
 
-inline int BitrateToPacketSize(int bitrate) {
+inline int BitrateToPacketSize(int bitrate, int frame_rate) {
   return static_cast<int>(
-      std::ceil(static_cast<float>(bitrate) / (kFrameRate * CHAR_BIT)));
+      std::ceil(static_cast<float>(bitrate) / (frame_rate * CHAR_BIT)));
 }
 
-inline int GetBitrate(int num_quantized_bits) {
-  return GetPacketSize(num_quantized_bits) * CHAR_BIT * kFrameRate;
+inline int GetBitrate(int num_quantized_bits, int frame_rate) {
+  return GetPacketSize(num_quantized_bits) * CHAR_BIT * frame_rate;
 }
 
 inline bool IsSampleRateSupported(int sample_rate_hz) {
@@ -105,9 +106,9 @@ inline int PacketSizeToNumQuantizedBits(int packet_size) {
   return -1;
 }
 
-inline int BitrateToNumQuantizedBits(int bitrate) {
+inline int BitrateToNumQuantizedBits(int bitrate, int frame_rate) {
   for (int num_quantized_bits : GetSupportedQuantizedBits()) {
-    if (bitrate == GetBitrate(num_quantized_bits)) {
+    if (bitrate == GetBitrate(num_quantized_bits, frame_rate)) {
       return num_quantized_bits;
     }
   }
@@ -123,9 +124,9 @@ inline absl::Status AreParamsSupported(
     return absl::InvalidArgumentError(absl::StrFormat(
         "Sample rate %d Hz is not supported by codec.", sample_rate_hz));
   }
-  if (num_channels != kNumChannels) {
+  if (num_channels > kNumChannels) {
     return absl::InvalidArgumentError(absl::StrFormat(
-        "Number of channels %d is not supported by codec. It needs to be %d.",
+        "Number of channels %d is not supported by codec. It needs to be 1 or 2.",
         num_channels, kNumChannels));
   }
   for (auto asset : GetAssets()) {

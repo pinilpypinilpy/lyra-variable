@@ -67,7 +67,7 @@ bool EncodeWav(const std::vector<int16_t>& wav_data, int num_channels,
         absl::MakeConstSpan(wav_data.data(), wav_data.size()), sample_rate_hz);
   }
 
-  const int num_samples_per_packet = sample_rate_hz / encoder->frame_rate();
+  const int num_samples_per_packet = sample_rate_hz / (sample_rate_hz/320);
   // Iterate over the wav data until the end of the vector.
   for (int wav_iterator = 0;
        wav_iterator + num_samples_per_packet <= processed_data.size();
@@ -96,7 +96,7 @@ bool EncodeWav(const std::vector<int16_t>& wav_data, int num_channels,
 }
 
 bool EncodeFile(const ghc::filesystem::path& wav_path,
-                const ghc::filesystem::path& output_path, int bitrate,
+                const ghc::filesystem::path& output_path, int quality_preset,
                 bool enable_preprocessing, bool enable_dtx,
                 const ghc::filesystem::path& model_path) {
   // Reads the entire wav file into memory.
@@ -107,7 +107,29 @@ bool EncodeFile(const ghc::filesystem::path& wav_path,
     LOG(ERROR) << read_wav_result.status();
     return false;
   }
+  int bitrate = 0;
+  int multiple = read_wav_result->sample_rate_hz/8000;
+  if (quality_preset == 1) {
+    bitrate = 1600*multiple;
+    
+  } else if (quality_preset == 2) {
+    bitrate = (1400*multiple) + (1600*multiple);
 
+  } else if (quality_preset == 3) {
+    bitrate = (1400*multiple) + (1600*multiple)*2;
+  } else if (quality_preset == 4) {
+    bitrate = (1400*multiple)*2 + (1600*multiple)*2;
+  } else if (quality_preset == 5) {
+    bitrate = (1400*multiple)*2 + (1600*multiple)*3;
+  } else if (quality_preset == 6) {
+    bitrate = (1400*multiple)*3 + (1600*multiple)*3;
+  } else if (quality_preset == 7) {
+    bitrate = (1400*multiple)*3 + (1600*multiple)*4;
+  } else if (quality_preset == 8) {
+    bitrate = (1400*multiple)*4 + (1600*multiple)*4;
+  } else {
+    LOG(ERROR) << "Unsupported quality preset: " << quality_preset;
+  }
   // Keep an accumulator vector of all the encoded features to write to file.
   std::vector<uint8_t> encoded_features;
   if (!EncodeWav(read_wav_result->samples, read_wav_result->num_channels,

@@ -31,7 +31,7 @@ namespace codec {
 namespace {
 
 //  LINT.IfChange
-constexpr int kMaxNumPacketBits = 184;
+constexpr int kMaxNumPacketBits = 480;
 // LINT.ThenChange(
 // lyra_config.cc,
 // residual_vector_quantizer.h,
