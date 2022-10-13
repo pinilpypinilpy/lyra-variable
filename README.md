@@ -5,6 +5,7 @@ CHANGED IN THIS FORK:
 2. The sampling rate is NOT hardcoded, and can be either 8000, 16000, 24000, 32000 or 48000, and must be specified in decoder_main with --sample_rate (encoder_main reads it from the input file).
 3. The number of channels can be either 1 or 2, and must also be specified in decoder_main with --num_channels.
 4. Lots of bugs added. This fork introduces features that the original developers deliberately disabled, and in a very crude manner as on a scale of 1-10, I am a 0 based on programming skills.
+5. Bad quality. While quality might be the same as normal lyra v2 when using 16khz and presets 1-3, anything outside of that is unfamiliar ground to the model doing the encoding. I am not responsible if you damage your hearing somehow.
 ----------------------------------
 ## What is Lyra?
 
