@@ -2,7 +2,7 @@
 ----------------------------------
 CHANGED IN THIS FORK:
 1. Swapped the 3 bitrate presets for 8 quality presets (--quality_preset) in both encoder_main and decoder_main. The first three behave the same as the original three and the rest scale up higher.
-2. The sampling rate is NOT hardcoded, and can be either 8000, 16000, 24000, 32000 or 48000, and must be specified in decoder_main with --sampling_rate (encoder_main reads it from the input file).
+2. The sampling rate is NOT hardcoded, and can be either 8000, 16000, 24000, 32000 or 48000, and must be specified in decoder_main with --sample_rate (encoder_main reads it from the input file).
 3. The number of channels can be either 1 or 2, and must also be specified in decoder_main with --num_channels.
 4. Lots of bugs added. This fork introduces features that the original developers deliberately disabled, and in a very crude manner as on a scale of 1-10, I am a 0 based on programming skills.
 ----------------------------------
