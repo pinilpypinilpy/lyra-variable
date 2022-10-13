@@ -58,7 +58,7 @@ std::unique_ptr<LyraEncoder> LyraEncoder::Create(
   std::unique_ptr<Resampler> resampler = nullptr;
   int numFeatures = 64;
   if (sample_rate_hz == 8000) {
-    numFeatures = 128;
+    numFeatures = 96;
   } else if (sample_rate_hz == 16000) {
     numFeatures = 64;
   } else if (sample_rate_hz == 24000) {
